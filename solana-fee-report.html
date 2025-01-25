@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Solana Fee Report (Browser)</title>
+  <style>
+    /* Overall Page Layout */
+    body {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f2f2f2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #333;
+    }
+    h1 {
+      margin: 1rem 0 0.5rem;
+      font-weight: 600;
+    }
+
+    .container {
+      width: 90%; /* changed to 90% so we see all columns easily */
+      max-width: 2000px; /* You can enlarge if you want more horizontal space */
+      margin: 1rem auto 3rem;
+    }
+
+    /* Form Styles */
+    form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      background: #fff;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    input {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      grid-column: span 2;
+      padding: 0.75rem;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    /* Progress Bar Container */
+    #progressContainer {
+      width: 100%;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      padding: 1rem;
+      display: none; /* Hidden initially */
+    }
+    .progress-bar {
+      width: 100%;
+      background-color: #e9ecef;
+      border-radius: 8px;
+      overflow: hidden;
+      height: 20px;
+      margin-top: 0.5rem;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background-color: #007bff;
+      width: 0;
+      transition: width 0.2s;
+    }
+    #progressLabel {
+      font-weight: 600;
+    }
+
+    /* Log Output */
+    #logContainer {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      border-radius: 8px;
+      width: 100%;
+      max-height: 250px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: "Consolas", monospace;
+      margin-bottom: 1rem;
+    }
+
+    /* Report Section (IndexedDB) */
+    .report-section {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      border-radius: 8px;
+      width: 100%;
+      margin-top: 1rem;
+    }
+    .report-section h2 {
+      margin-top: 0;
+      font-weight: 600;
+    }
+
+    /* Table for Stored Data */
+    .stored-data-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .stored-data-controls input {
+      max-width: 300px;
+    }
+
+    .stored-data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    .stored-data-table th,
+    .stored-data-table td {
+      border: 1px solid #ddd;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    .stored-data-table th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      cursor: pointer; /* for sorting */
+      user-select: none;
+    }
+    .stored-data-table tbody tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    .scrollable-table {
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+    }
+
+    /* Highlight classes for table or logs */
+    .highlight-fee {
+      color: #d9534f; /* red-ish for emphasis */
+      font-weight: 600;
+    }
+    .highlight-usd {
+      color: #fd7e14; /* orange for USD amounts */
+      font-weight: 600;
+    }
+    .highlight-cu {
+      color: #343a40; /* dark grey for compute units */
+      font-weight: 600;
+    }
+
+    /* Pager buttons */
+    .pager {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .pager button {
+      background-color: #6c757d;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.875rem;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .pager button:hover {
+      background-color: #5a6268;
+    }
+    .pager .info {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+<h1>Solana Fee Report</h1>
+
+<div class="container">
+  <!-- Configuration Form -->
+  <form id="configForm">
+    <div style="grid-column: span 2;">
+      <label for="rpcEndpoint">RPC Endpoint URL:</label>
+      <input
+              type="text"
+              id="rpcEndpoint"
+              placeholder="https://mainnet.helius-rpc.com/?api-key="
+      />
+    </div>
+
+    <div>
+      <label for="numSamples">Number of block batches:</label>
+      <input type="number" id="numSamples" />
+    </div>
+
+    <div>
+      <label for="batchSize">Blocks per batch:</label>
+      <input type="number" id="batchSize" />
+    </div>
+
+    <div style="grid-column: span 2;">
+      <label for="delay">Delay (seconds) between fetches:</label>
+      <input type="number" id="delay" />
+    </div>
+
+    <button type="button" id="startBtn">Start Analysis</button>
+  </form>
+
+  <!-- Progress Bar -->
+  <div id="progressContainer">
+    <span id="progressLabel"></span>
+    <div class="progress-bar">
+      <div class="progress-bar-fill" id="progressBarFill"></div>
+    </div>
+  </div>
+
+  <!-- Log Output (minimal) -->
+  <div id="logContainer"></div>
+
+  <!-- Stored Data Section (always visible) -->
+  <div class="report-section">
+    <h2>Stored Block Data (IndexedDB)</h2>
+
+    <!-- Filter and paging controls -->
+    <div class="stored-data-controls">
+      <div>
+        <label for="filterInput"><strong>Filter:</strong></label>
+        <input type="text" id="filterInput" placeholder="Filter by slot/id..." />
+      </div>
+      <div class="pager">
+        <button id="prevPageBtn">Prev</button>
+        <span class="info" id="pageInfo"></span>
+        <button id="nextPageBtn">Next</button>
+      </div>
+    </div>
+
+    <!-- Table container -->
+    <div class="scrollable-table">
+      <table class="stored-data-table">
+        <thead>
+        <tr>
+          <th data-col="id">ID</th>
+          <th data-col="start_slot">Start Slot</th>
+          <th data-col="end_slot">End Slot</th>
+          <th data-col="total_transactions">Non-Voting TXs</th>
+          <th data-col="average_tps">Avg TPS</th>
+
+          <th data-col="max_fee_sol">Max Fee (SOL)</th>
+          <th data-col="max_fee_usd">Max Fee (USD)</th>
+
+          <th data-col="average_fee_sol">Avg Fee (SOL)</th>
+          <th data-col="average_fee_usd">Avg Fee (USD)</th>
+
+          <th data-col="median_fee_sol">Median Fee (SOL)</th>
+          <th data-col="median_fee_usd">Median Fee (USD)</th>
+
+          <th data-col="percentile95_fee_sol">95% Fee (SOL)</th>
+          <th data-col="percentile95_fee_usd">95% Fee (USD)</th>
+
+          <th data-col="max_cu">Max CU</th>
+          <th data-col="average_cu">Avg CU</th>
+          <th data-col="median_cu">Median CU</th>
+          <th data-col="sol_price_usd">SOL Price (USD)</th>
+        </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div> <!-- end .report-section -->
+</div> <!-- end .container -->
+
+<!-- Solana Web3 -->
+<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.78.0/lib/index.iife.min.js"></script>
+
+<script type="module">
+  const { Connection, LAMPORTS_PER_SOL } = solanaWeb3;
+
+  // Form elements
+  const rpcEndpointInput = document.getElementById("rpcEndpoint");
+  const numSamplesInput = document.getElementById("numSamples");
+  const batchSizeInput = document.getElementById("batchSize");
+  const delayInput = document.getElementById("delay");
+  const startBtn = document.getElementById("startBtn");
+
+  // Progress elements
+  const progressContainer = document.getElementById("progressContainer");
+  const progressLabel = document.getElementById("progressLabel");
+  const progressBarFill = document.getElementById("progressBarFill");
+
+  // Log container
+  const logContainer = document.getElementById("logContainer");
+  function log(message) {
+    console.log(message);
+    logContainer.textContent += message + "\n";
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  // Table / data elements
+  const filterInput = document.getElementById("filterInput");
+  const tableBody = document.getElementById("tableBody");
+  const prevPageBtn = document.getElementById("prevPageBtn");
+  const nextPageBtn = document.getElementById("nextPageBtn");
+  const pageInfo = document.getElementById("pageInfo");
+
+  let db;
+  let allResults = []; // All data from IndexedDB
+  let currentPage = 1;
+  const pageSize = 20; // Show 20 entries per page
+  let currentSortCol = "id";
+  let currentSortDir = "desc"; // 'asc' or 'desc'
+
+  // ------------------------------------
+  // LOCAL STORAGE FOR FORM SETTINGS
+  // ------------------------------------
+  function loadSettings() {
+    const storedRpc = localStorage.getItem("feeReport_rpcEndpoint");
+    const storedNumSamples = localStorage.getItem("feeReport_numSamples");
+    const storedBatchSize = localStorage.getItem("feeReport_batchSize");
+    const storedDelay = localStorage.getItem("feeReport_delay");
+
+    rpcEndpointInput.value = storedRpc !== null ? storedRpc : "";
+    numSamplesInput.value = storedNumSamples !== null ? storedNumSamples : 2;
+    batchSizeInput.value = storedBatchSize !== null ? storedBatchSize : 5;
+    delayInput.value = storedDelay !== null ? storedDelay : 1;
+  }
+
+  function saveSettings() {
+    localStorage.setItem("feeReport_rpcEndpoint", rpcEndpointInput.value.trim());
+    localStorage.setItem("feeReport_numSamples", numSamplesInput.value);
+    localStorage.setItem("feeReport_batchSize", batchSizeInput.value);
+    localStorage.setItem("feeReport_delay", delayInput.value);
+  }
+
+  // Save any changes automatically
+  rpcEndpointInput.addEventListener("change", saveSettings);
+  numSamplesInput.addEventListener("change", saveSettings);
+  batchSizeInput.addEventListener("change", saveSettings);
+  delayInput.addEventListener("change", saveSettings);
+
+  // ------------------------------------
+  // IndexDB Setup
+  // ------------------------------------
+  async function openDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("solana_data_db", 1);
+      request.onupgradeneeded = (event) => {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains("block_data")) {
+          const objectStore = db.createObjectStore("block_data", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          objectStore.createIndex("start_slot", "start_slot", { unique: false });
+        }
+      };
+      request.onsuccess = (event) => {
+        db = event.target.result;
+        resolve(db);
+      };
+      request.onerror = (event) => {
+        reject("Error opening IndexedDB: " + event.target.error);
+      };
+    });
+  }
+
+  function storeBatchDataInIndexedDB(dataObj) {
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(["block_data"], "readwrite");
+      const objectStore = transaction.objectStore("block_data");
+      const request = objectStore.add(dataObj);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) =>
+              reject("Error storing batch data: " + event.target.error);
+    });
+  }
+
+  // ------------------------------------
+  // Fetch & Display Stored Data
+  // ------------------------------------
+  async function fetchAllStoredData() {
+    return new Promise((resolve) => {
+      const transaction = db.transaction(["block_data"], "readonly");
+      const objectStore = transaction.objectStore("block_data");
+      const request = objectStore.getAll();
+      request.onsuccess = (event) => {
+        const results = event.target.result || [];
+        resolve(results);
+      };
+    });
+  }
+
+  async function displayStoredData() {
+    allResults = await fetchAllStoredData();
+    // Sort by ID descending by default
+    allResults.sort((a, b) => b.id - a.id);
+    currentPage = 1;
+    currentSortCol = "id";
+    currentSortDir = "desc";
+    updateTable();
+  }
+
+  // ------------------------------------
+  // Table Updating (Paging, Filter, Sort)
+  // ------------------------------------
+  function updateTable() {
+    // Filter
+    const filterVal = filterInput.value.toLowerCase().trim();
+    let filtered = allResults;
+    if (filterVal) {
+      filtered = allResults.filter((item) => {
+        // We'll check ID, start_slot, end_slot
+        if (
+                ("" + item.id).includes(filterVal) ||
+                ("" + item.start_slot).includes(filterVal) ||
+                ("" + item.end_slot).includes(filterVal)
+        ) {
+          return true;
+        }
+        return false;
+      });
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      const valA = a[currentSortCol];
+      const valB = b[currentSortCol];
+
+      if (valA < valB) return currentSortDir === "asc" ? -1 : 1;
+      if (valA > valB) return currentSortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    // Paging
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > totalPages) currentPage = totalPages || 1;
+
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const pageItems = filtered.slice(startIndex, endIndex);
+
+    // Update pager UI
+    pageInfo.textContent = `Page ${currentPage} of ${Math.max(totalPages, 1)}`;
+
+    // Build table rows
+    let html = "";
+    pageItems.forEach((row) => {
+      html += "<tr>";
+      html += `<td>${row.id}</td>`;
+      html += `<td>${row.start_slot}</td>`;
+      html += `<td>${row.end_slot}</td>`;
+      html += `<td>${row.total_transactions}</td>`;
+      html += `<td>${row.average_tps.toFixed(2)}</td>`;
+
+      html += `<td class="highlight-fee">${row.max_fee_sol.toFixed(9)}</td>`;
+      html += `<td class="highlight-usd">${(row.max_fee_usd || 0).toFixed(2)}</td>`;
+
+      html += `<td class="highlight-fee">${row.average_fee_sol.toFixed(9)}</td>`;
+      html += `<td class="highlight-usd">${(row.average_fee_usd || 0).toFixed(2)}</td>`;
+
+      html += `<td class="highlight-fee">${row.median_fee_sol.toFixed(9)}</td>`;
+      html += `<td class="highlight-usd">${(row.median_fee_usd || 0).toFixed(2)}</td>`;
+
+      html += `<td class="highlight-fee">${row.percentile95_fee_sol.toFixed(9)}</td>`;
+      html += `<td class="highlight-usd">${(row.percentile95_fee_usd || 0).toFixed(2)}</td>`;
+
+      html += `<td class="highlight-cu">${row.max_cu}</td>`;
+      html += `<td class="highlight-cu">${row.average_cu.toFixed(2)}</td>`;
+      html += `<td class="highlight-cu">${row.median_cu}</td>`;
+      html += `<td class="highlight-usd">${row.sol_price_usd.toFixed(2)}</td>`;
+      html += "</tr>";
+    });
+    tableBody.innerHTML = html;
+  }
+
+  prevPageBtn.addEventListener("click", () => {
+    currentPage--;
+    updateTable();
+  });
+  nextPageBtn.addEventListener("click", () => {
+    currentPage++;
+    updateTable();
+  });
+  filterInput.addEventListener("input", () => {
+    currentPage = 1;
+    updateTable();
+  });
+
+  // Sorting on column headers
+  document.querySelectorAll(".stored-data-table th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.getAttribute("data-col");
+      if (col) {
+        if (currentSortCol === col) {
+          // Toggle direction
+          currentSortDir = currentSortDir === "asc" ? "desc" : "asc";
+        } else {
+          currentSortCol = col;
+          currentSortDir = "asc";
+        }
+        currentPage = 1;
+        updateTable();
+      }
+    });
+  });
+
+  // ------------------------------------
+  // Price Fetch from CoinGecko
+  // ------------------------------------
+  async function fetchSolPriceUSD() {
+    const url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd";
+    try {
+      const resp = await fetch(url);
+      const data = await resp.json();
+      return data?.solana?.usd ?? 0;
+    } catch (e) {
+      log("Error fetching Solana price: " + e);
+      return 0;
+    }
+  }
+
+  // ------------------------------------
+  // Helpers for Transaction Statistics
+  // ------------------------------------
+  function isVotingTransaction(transaction) {
+    const VOTE_PROGRAM_ID = "Vote111111111111111111111111111111111111111";
+    const STAKE_PROGRAM_ID = "Stake11111111111111111111111111111111111111";
+    try {
+      const accountKeys = transaction?.transaction?.message?.accountKeys || [];
+      return accountKeys.some((account) => {
+        const keyString = account.toString();
+        return (keyString === VOTE_PROGRAM_ID || keyString === STAKE_PROGRAM_ID);
+      });
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function calculatePercentile(sortedArray, percentile) {
+    if (sortedArray.length === 0) return 0;
+    const index = Math.ceil((percentile / 100) * sortedArray.length) - 1;
+    return sortedArray[Math.max(0, index)];
+  }
+
+  // ------------------------------------
+  // Main Analysis
+  // ------------------------------------
+  async function analyzePriorityFees(numSamples, batchSize, delay) {
+    // Clear old logs
+    logContainer.textContent = "";
+
+    // Show the progress container
+    progressContainer.style.display = "block";
+    progressLabel.textContent = "Starting...";
+
+    try {
+      // RPC endpoint
+      const rpcInputVal = rpcEndpointInput.value.trim() || "https://mainnet.helius-rpc.com/?api-key=";
+      const connection = new Connection(rpcInputVal, "confirmed");
+
+      const latestSlot = await connection.getSlot();
+
+      // Get Sol Price
+      let solPriceUSD = await fetchSolPriceUSD();
+      if (!solPriceUSD || isNaN(solPriceUSD)) {
+        solPriceUSD = 0;
+      }
+
+      // We'll move backwards from latestSlot
+      let batchStartSlot = latestSlot;
+      let totalBatchesProcessed = 0;
+
+      const totalBlocks = numSamples * batchSize;
+      let blocksFetched = 0;
+
+      for (let i = 0; i < numSamples; i++) {
+        const priorityFees = [];
+        const computeUnits = [];
+        let totalNonVotingTx = 0;
+
+        const startSlot = batchStartSlot;
+        const endSlot = batchStartSlot - (batchSize - 1);
+
+        for (let j = 0; j < batchSize; j++) {
+          const currentSlot = batchStartSlot - j;
+          blocksFetched++;
+
+          // Update progress bar
+          const pct = Math.floor((blocksFetched / totalBlocks) * 100);
+          progressBarFill.style.width = pct + "%";
+          progressLabel.textContent = `Fetching block at slot ${currentSlot} (${blocksFetched}/${totalBlocks})`;
+
+          const block = await connection.getBlock(currentSlot, {
+            maxSupportedTransactionVersion: 0,
+            transactionDetails: "full",
+            rewards: false,
+          });
+
+          if (block && block.transactions) {
+            block.transactions.forEach((tx) => {
+              if (!isVotingTransaction(tx)) {
+                const meta = tx.meta;
+                if (meta && typeof meta.fee === "number") {
+                  const feeInSOL = meta.fee / LAMPORTS_PER_SOL;
+                  if (feeInSOL > 0) {
+                    priorityFees.push(feeInSOL);
+                    totalNonVotingTx++;
+                  }
+                }
+                if (
+                        meta &&
+                        Object.prototype.hasOwnProperty.call(meta, "computeUnitsConsumed")
+                ) {
+                  computeUnits.push(meta.computeUnitsConsumed);
+                }
+              }
+            });
+          }
+
+          // Delay if needed
+          if (delay > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+          }
+        }
+
+        // Compute stats for the batch
+        if (priorityFees.length === 0) {
+          // No non-voting fees found
+          log(`No non-voting fees found for slots ${startSlot}..${endSlot}.`);
+        } else {
+          priorityFees.sort((a, b) => a - b);
+          const maxFee = priorityFees[priorityFees.length - 1];
+          const averageFee =
+                  priorityFees.reduce((sum, f) => sum + f, 0) / priorityFees.length;
+          const medianFee =
+                  priorityFees.length % 2 === 0
+                          ? (priorityFees[priorityFees.length / 2 - 1] + priorityFees[priorityFees.length / 2]) / 2
+                          : priorityFees[Math.floor(priorityFees.length / 2)];
+          const pct95Fee = calculatePercentile(priorityFees, 95);
+
+          computeUnits.sort((a, b) => a - b);
+          const maxCU = computeUnits[computeUnits.length - 1] || 0;
+          const averageCU = computeUnits.length
+                  ? computeUnits.reduce((sum, cu) => sum + cu, 0) / computeUnits.length
+                  : 0;
+          const medianCU =
+                  computeUnits.length % 2 === 0 && computeUnits.length > 0
+                          ? (computeUnits[computeUnits.length / 2 - 1] +
+                          computeUnits[computeUnits.length / 2]) / 2
+                          : computeUnits[Math.floor(computeUnits.length / 2)] || 0;
+
+          // Approx block time
+          const blockTimeSeconds = 0.4;
+          const totalTime = batchSize * blockTimeSeconds;
+          const averageTPS = totalNonVotingTx / totalTime;
+
+          // We'll also compute the USD equivalents
+          const maxFeeUSD = maxFee * solPriceUSD;
+          const avgFeeUSD = averageFee * solPriceUSD;
+          const medianFeeUSD = medianFee * solPriceUSD;
+          const pct95FeeUSD = pct95Fee * solPriceUSD;
+
+          // Log a summary for this batch
+          log(
+                  `\n--- Slots ${startSlot}..${endSlot} ---\n` +
+                  `Non-Voting TXs: ${totalNonVotingTx}\n` +
+                  `Avg TPS: ${averageTPS.toFixed(2)}\n` +
+                  `Max Fee: ${maxFee.toFixed(9)} SOL ($${maxFeeUSD.toFixed(2)})\n` +
+                  `Avg Fee: ${averageFee.toFixed(9)} SOL ($${avgFeeUSD.toFixed(2)})\n` +
+                  `Median Fee: ${medianFee.toFixed(9)} SOL ($${medianFeeUSD.toFixed(2)})\n` +
+                  `95% Fee: ${pct95Fee.toFixed(9)} SOL ($${pct95FeeUSD.toFixed(2)})\n` +
+                  `Max CU: ${maxCU}\n` +
+                  `Avg CU: ${averageCU.toFixed(2)}\n` +
+                  `Median CU: ${medianCU}\n` +
+                  `SOL Price: $${solPriceUSD.toFixed(2)}\n----------------------------\n`
+          );
+
+          // Save to DB with extra columns for USD
+          const dataObj = {
+            start_slot: startSlot,
+            end_slot: endSlot,
+            total_transactions: totalNonVotingTx,
+            average_tps: averageTPS,
+
+            max_fee_sol: maxFee,
+            max_fee_usd: maxFeeUSD,
+
+            average_fee_sol: averageFee,
+            average_fee_usd: avgFeeUSD,
+
+            median_fee_sol: medianFee,
+            median_fee_usd: medianFeeUSD,
+
+            percentile95_fee_sol: pct95Fee,
+            percentile95_fee_usd: pct95FeeUSD,
+
+            max_cu: maxCU,
+            average_cu: averageCU,
+            median_cu: medianCU,
+
+            sol_price_usd: solPriceUSD,
+            timestamp: Date.now(),
+          };
+          await storeBatchDataInIndexedDB(dataObj);
+        }
+
+        // Move backward
+        batchStartSlot -= batchSize;
+        totalBatchesProcessed++;
+      }
+
+      // Final log
+      log(`\nProcessed ${totalBatchesProcessed} batches of ${batchSize} blocks.`);
+
+      // Hide progress bar when done
+      progressContainer.style.display = "none";
+
+      // Re-read and show data
+      displayStoredData();
+    } catch (error) {
+      log("Error analyzing priority fees: " + error);
+      // Hide progress bar if an error occurs
+      progressContainer.style.display = "none";
+    }
+  }
+
+  // ------------------------------------
+  // On Page Load
+  // ------------------------------------
+  window.addEventListener("load", async () => {
+    // Load any saved settings
+    loadSettings();
+
+    // Open DB
+    await openDatabase();
+
+    // Display any existing data
+    displayStoredData();
+  });
+
+  // ------------------------------------
+  // Start Button
+  // ------------------------------------
+  startBtn.addEventListener("click", async () => {
+    const numSamples = parseInt(numSamplesInput.value, 10) || 2;
+    const batchSize = parseInt(batchSizeInput.value, 10) || 5;
+    const delay = parseInt(delayInput.value, 10) || 1;
+
+    // Save settings once more (in case user changed them)
+    saveSettings();
+
+    // Run the analysis
+    analyzePriorityFees(numSamples, batchSize, delay);
+  });
+</script>
+</body>
+</html>
