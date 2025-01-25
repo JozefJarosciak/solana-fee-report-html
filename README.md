@@ -14,6 +14,10 @@ This is a browser-based tool for analyzing priority fees (and compute units) in 
 - **Stores** results in your browser's IndexedDB for convenient reference.
 - **Displays** results in an interactive table (with pagination, sorting, and filtering).
 
+## Screenshot
+![image](https://github.com/user-attachments/assets/f1e413ef-1ebe-433d-8640-980897d8dcb0)
+
+
 ## Why This Tool?
 - Investigate how often high priority fees appear in blocks.
 - Get an idea of compute unit usage over recent blocks.
